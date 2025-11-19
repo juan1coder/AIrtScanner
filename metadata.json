@@ -1,0 +1,5 @@
+{
+  "name": "Art Style Scanner",
+  "description": "An application that analyzes an uploaded image to identify its artistic style, techniques, and color palette, generating a descriptive text prompt. Users can export the style prompt in various formats.",
+  "requestFramePermissions": []
+}
