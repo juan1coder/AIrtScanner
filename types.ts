@@ -6,6 +6,7 @@ export interface AnalysisResult {
   colorPalette: string[];
   composition: string[];
   mood: string;
+  creativePrompt: string; // New field for the evocative description
 }
 
 export type OutputFormat = 'txt' | 'json' | 'toml';
@@ -16,6 +17,15 @@ export interface GeneratedItem {
   title: string;
   prompt: string;
   modifiers: string[];
+  styleContext?: string; // The full text analysis if available
+  timestamp: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text?: string;
+  imageUrl?: string;
   timestamp: number;
 }
 

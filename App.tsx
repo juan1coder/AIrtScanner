@@ -3,10 +3,10 @@ import React, { useState, useCallback } from 'react';
 import { ImageUploader } from './components/ImageUploader';
 import { ResultDisplay } from './components/ResultDisplay';
 import { Spinner } from './components/Spinner';
+import { ImageEditor } from './components/ImageEditor';
 import { analyzeImageStyle, editImageWithGemini, generateCreativeTitle } from './services/geminiService';
 import { AnalysisResult, GeneratedItem, STYLE_PRESETS } from './types';
-// Added XIcon to imports
-import { GithubIcon, MagicIcon, WandIcon, HistoryIcon, PlusIcon, DownloadIcon, XIcon } from './components/icons';
+import { GithubIcon, MagicIcon, WandIcon, HistoryIcon, PlusIcon, DownloadIcon, XIcon, CopyIcon, ChatBubbleIcon, TextIcon } from './components/icons';
 
 const App: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -21,9 +21,13 @@ const App: React.FC = () => {
   const [customModifier, setCustomModifier] = useState('');
   const [generatedHistory, setGeneratedHistory] = useState<GeneratedItem[]>([]);
   
+  // Editing State
+  const [editingItem, setEditingItem] = useState<GeneratedItem | null>(null);
+  
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
 
   const handleImageChange = (file: File) => {
     setImageFile(file);
@@ -87,14 +91,21 @@ const App: React.FC = () => {
 
         // 2. Generate Title
         const title = await generateCreativeTitle(userIdea, selectedModifiers);
+        
+        // 3. Create style context string if analysis exists
+        let styleCtx = "";
+        if (analysisResult) {
+             styleCtx = `A ${analysisResult.style} style image, in the style of ${analysisResult.artist}. Featuring ${analysisResult.mood.toLowerCase()} tones, with a color palette of ${analysisResult.colorPalette.join(', ')}. Key techniques include ${analysisResult.techniques.join(', ')}.`;
+        }
 
-        // 3. Save to History
+        // 4. Save to History
         const newItem: GeneratedItem = {
             id: Date.now().toString(),
             imageUrl: generatedImgUrl,
             title: title,
             prompt: userIdea,
             modifiers: selectedModifiers,
+            styleContext: styleCtx,
             timestamp: Date.now()
         };
 
@@ -106,7 +117,7 @@ const App: React.FC = () => {
     } finally {
         setIsGenerating(false);
     }
-  }, [imageUrl, userIdea, selectedModifiers]);
+  }, [imageUrl, userIdea, selectedModifiers, analysisResult]);
 
   const toggleModifier = (mod: string) => {
     setSelectedModifiers(prev => 
@@ -129,9 +140,42 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
+  const generateLogText = (item: GeneratedItem) => {
+      return `${item.title}
+${new Date(item.timestamp).toLocaleString()}
+
+Prompt:
+${item.prompt}
+
+Styles:
+${item.modifiers.join(', ') || 'None'}
+
+${item.styleContext ? `Original Style Context:\n${item.styleContext}` : ''}`;
+  };
+
+  const handleCopyLog = (item: GeneratedItem) => {
+      const text = generateLogText(item);
+      navigator.clipboard.writeText(text);
+      setCopiedLogId(item.id);
+      setTimeout(() => setCopiedLogId(null), 2000);
+  };
+
+  const handleDownloadLog = (item: GeneratedItem) => {
+      const text = generateLogText(item);
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${item.title.replace(/\s+/g, '-').toLowerCase()}-log.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans flex flex-col">
-      <header className="py-4 px-6 md:px-8 border-b border-gray-700/50 flex justify-between items-center bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="py-4 px-6 md:px-8 border-b border-gray-700/50 flex justify-between items-center bg-gray-900/80 backdrop-blur-sm sticky top-0 z-40">
         <h1 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 flex items-center gap-2">
           <WandIcon className="w-6 h-6 text-purple-400" />
           Art Style Scanner <span className="text-xs font-normal text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full border border-gray-700">Nano Banana</span>
@@ -255,29 +299,54 @@ const App: React.FC = () => {
                 
                 {/* HISTORY SECTION */}
                 {generatedHistory.length > 0 && (
-                    <div className="space-y-4">
+                    <div className="space-y-4 animate-fade-in">
                          <h3 className="text-xl font-bold text-gray-200 flex items-center gap-2">
                             <HistoryIcon className="w-5 h-5 text-gray-400" />
                             History Log
                          </h3>
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {generatedHistory.map((item) => (
-                                <div key={item.id} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden group hover:border-purple-500/50 transition-all duration-300">
+                                <div key={item.id} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden group hover:border-purple-500/50 transition-all duration-300 flex flex-col">
                                     <div className="relative aspect-video bg-gray-900">
                                         <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                                            <a href={item.imageUrl} download={`nano-render-${item.id}.png`} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-sm">
-                                                <DownloadIcon className="w-6 h-6" />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                            <a href={item.imageUrl} download={`nano-render-${item.id}.png`} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-sm" title="Download Image">
+                                                <DownloadIcon className="w-5 h-5" />
                                             </a>
+                                            <button 
+                                                onClick={() => setEditingItem(item)}
+                                                className="p-2 bg-purple-600/80 hover:bg-purple-600 rounded-full text-white backdrop-blur-sm"
+                                                title="Chat Edit"
+                                            >
+                                                <ChatBubbleIcon className="w-5 h-5" />
+                                            </button>
                                         </div>
                                         <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded text-xs text-cyan-300 border border-white/10">
                                             Nano Render
                                         </div>
                                     </div>
-                                    <div className="p-4">
-                                        <h4 className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-cyan-300 mb-1">{item.title}</h4>
-                                        <p className="text-xs text-gray-500 mb-2">{new Date(item.timestamp).toLocaleTimeString()}</p>
-                                        <p className="text-sm text-gray-300 line-clamp-2 mb-2">{item.prompt}</p>
+                                    <div className="p-4 flex-1 flex flex-col">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h4 className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-cyan-300">{item.title}</h4>
+                                            <div className="flex gap-1">
+                                                <button 
+                                                    onClick={() => handleCopyLog(item)}
+                                                    className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700 transition-colors"
+                                                    title="Copy Full Log"
+                                                >
+                                                    {copiedLogId === item.id ? <span className="text-[10px] text-green-400 font-bold">OK</span> : <CopyIcon className="w-4 h-4" />}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDownloadLog(item)}
+                                                    className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700 transition-colors"
+                                                    title="Download Log Text"
+                                                >
+                                                    <TextIcon className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mb-2">{new Date(item.timestamp).toLocaleString()}</p>
+                                        <p className="text-sm text-gray-300 line-clamp-2 mb-2 flex-1">{item.prompt}</p>
                                         <div className="flex flex-wrap gap-1">
                                             {item.modifiers.map(mod => (
                                                 <span key={mod} className="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded">{mod}</span>
@@ -292,6 +361,15 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
+
+      {/* Modal Editor */}
+      {editingItem && (
+          <ImageEditor 
+            initialItem={editingItem} 
+            onClose={() => setEditingItem(null)} 
+          />
+      )}
+
        <footer className="text-center py-4 text-xs text-gray-600 border-t border-gray-700/50 mt-8">
         Powered by Google Gemini 2.5 Flash & Flash Image
       </footer>

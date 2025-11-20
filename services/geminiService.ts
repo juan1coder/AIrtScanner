@@ -34,15 +34,23 @@ const responseSchema = {
       items: { type: Type.STRING },
       description: 'A list of keywords describing the composition (e.g., "Dynamic lines", "Asymmetrical balance").'
     },
-    mood: { type: Type.STRING, description: 'The overall mood or feeling conveyed by the style (e.g., "Emotional and Dynamic", "Calm and Serene").' }
+    mood: { type: Type.STRING, description: 'The overall mood or feeling conveyed by the style (e.g., "Emotional and Dynamic", "Calm and Serene").' },
+    creativePrompt: { 
+        type: Type.STRING, 
+        description: 'A highly detailed, evocative, and artistic text prompt that describes the subject matter, style, lighting, and atmosphere combined. This prompt should be suitable for generating a similar image in an AI model.' 
+    }
   },
-  required: ['style', 'artist', 'techniques', 'colorPalette', 'composition', 'mood']
+  required: ['style', 'artist', 'techniques', 'colorPalette', 'composition', 'mood', 'creativePrompt']
 };
 
-const systemInstruction = `You are an expert art historian and critic. Your task is to analyze the visual style of an image. 
-Focus exclusively on the visual techniques, color palette, brushwork, composition, and overall aesthetic. 
-Do not describe the subject matter, characters, setting, or any narrative elements. 
-Identify the art movement, potential artist, and list the key stylistic elements as keywords. The output must be in JSON format.`;
+const systemInstruction = `You are an expert AI art curator and prompt engineer. Your task is to analyze the input image and "reverse engineer" a high-quality text prompt for it.
+
+1.  **Analyze the Visuals:** Identify the art style, medium (oil, digital, photo, etc.), artist influence, color palette, and lighting.
+2.  **Describe the Subject:** Unlike a dry catalog entry, describe the subject matter with artistic flair. Don't just say "a woman"; say "a striking biomechanical woman adorned by chips and circuits".
+3.  **Synthesize (The Creative Prompt):** Combine the subject description and the style analysis into a single, flowing, evocative paragraph. Use descriptive adjectives (e.g., "glinting", "diffused", "vibrant", "melancholic").
+    *   *Example:* "A striking biomechanical woman exudes HR Giger artistry. She is a cyber-goddess adorned by intricate chips and circuits in a monochrome tone, only her eyes glint with a soft pink diffused glow. The composition uses stark chiaroscuro lighting to highlight the metallic textures."
+
+Output the result in JSON format containing both the structured metadata and this creative prompt.`;
 
 export async function analyzeImageStyle(base64ImageData: string, mimeType: string): Promise<AnalysisResult> {
     const geminiClient = getAi();
@@ -55,7 +63,7 @@ export async function analyzeImageStyle(base64ImageData: string, mimeType: strin
     };
   
     const textPart = {
-      text: "Analyze the provided image and describe its artistic style.",
+      text: "Analyze this image and generate a creative art prompt for it.",
     };
   
     const response = await geminiClient.models.generateContent({
