@@ -91,7 +91,7 @@ export async function editImageWithGemini(
     mimeType: string, 
     prompt: string, 
     modifiers: string[]
-): Promise<string> {
+): Promise<{ imageUrl: string, executedPrompt: string }> {
     const geminiClient = getAi();
     
     const modifierString = modifiers.length > 0 
@@ -124,7 +124,10 @@ export async function editImageWithGemini(
     const part = response.candidates?.[0]?.content?.parts?.[0];
     if (part && part.inlineData) {
         const base64ImageBytes: string = part.inlineData.data;
-        return `data:image/png;base64,${base64ImageBytes}`;
+        return {
+            imageUrl: `data:image/png;base64,${base64ImageBytes}`,
+            executedPrompt: fullPrompt
+        };
     }
     
     throw new Error("No image generated.");

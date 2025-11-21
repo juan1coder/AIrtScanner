@@ -26,6 +26,7 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text?: string;
   imageUrl?: string;
+  executedPrompt?: string; // The full prompt sent to the AI
   timestamp: number;
 }
 

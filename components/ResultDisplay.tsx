@@ -8,7 +8,7 @@ interface ResultDisplayProps {
 }
 
 const Tag: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="inline-block bg-gray-700 text-cyan-300 text-sm font-medium mr-2 mb-2 px-3 py-1 rounded-full border border-gray-600/50">
+  <span className="inline-block bg-[#1a1c29] text-cyan-300 text-sm font-medium mr-2 mb-2 px-3 py-1 rounded-full border border-gray-600/50 shadow-sm">
     {children}
   </span>
 );
@@ -51,18 +51,19 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
   };
   
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-xl shadow-lg p-6 animate-fade-in">
+    <div className="bg-[#13141f] border border-gray-700/60 rounded-xl shadow-xl p-6 animate-fade-in">
       <div className="flex items-center gap-3 mb-6">
         <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">Analysis Result</h2>
       </div>
 
       {/* Creative Prompt Section - High Priority */}
-      <div className="mb-8 bg-gray-900/80 rounded-lg p-5 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.1)] relative group">
-        <div className="absolute -top-3 left-4 bg-gray-800 px-2 py-0.5 rounded text-xs text-purple-300 font-bold flex items-center gap-1 border border-purple-500/30">
+      <div className="mb-8 bg-[#0b0c15] rounded-lg p-5 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.1)] relative group">
+        <div className="absolute -top-3 left-4 bg-[#1a1c29] px-3 py-1 rounded text-xs text-purple-300 font-bold flex items-center gap-1 border border-purple-500/30 shadow-sm">
             <MagicIcon className="w-3 h-3" /> Generated Prompt
         </div>
-        <p className="text-gray-200 text-lg leading-relaxed font-serif italic selection:bg-purple-500/30">
-            "{result.creativePrompt}"
+        {/* Replaced serif/italic with readable sans-serif */}
+        <p className="text-gray-200 text-lg leading-relaxed font-sans selection:bg-purple-500/30 pt-2">
+            {result.creativePrompt}
         </p>
       </div>
       
@@ -98,15 +99,15 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
         </div>
       </div>
 
-      <div className="mt-8 pt-6 border-t border-gray-700">
+      <div className="mt-8 pt-6 border-t border-gray-700/50">
         <div className="flex items-center justify-between mb-3">
              <h3 className="font-semibold text-gray-300">Export Data</h3>
-             <div className="flex bg-gray-900 rounded-lg p-1">
+             <div className="flex bg-[#0b0c15] rounded-lg p-1 border border-gray-700">
                 {(['txt', 'json', 'toml'] as OutputFormat[]).map(format => (
                     <button
                         key={format}
                         onClick={() => setOutputFormat(format)}
-                        className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${outputFormat === format ? 'bg-purple-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${outputFormat === format ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}
                     >
                         {format.toUpperCase()}
                     </button>
@@ -115,11 +116,11 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={handleCopy} className="flex-1 flex justify-center items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+            <button onClick={handleCopy} className="flex-1 flex justify-center items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-colors border border-gray-600">
                 <CopyIcon className="w-4 h-4" />
                 {copied ? 'Copied!' : 'Copy Prompt & Data'}
             </button>
-            <button onClick={handleDownload} className="flex-1 flex justify-center items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium py-2 px-4 rounded-lg transition-colors shadow-lg">
+            <button onClick={handleDownload} className="flex-1 flex justify-center items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg shadow-cyan-900/20">
                 <DownloadIcon className="w-4 h-4" />
                 Download File
             </button>
