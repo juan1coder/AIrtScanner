@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { AnalysisResult } from '../types';
+import { AnalysisResult, StyleExtractionResult } from '../types';
 
 let ai: GoogleGenAI;
 
@@ -43,16 +43,34 @@ const responseSchema = {
   required: ['style', 'artist', 'techniques', 'colorPalette', 'composition', 'mood', 'creativePrompt']
 };
 
-const systemInstruction = `You are an expert AI art curator and prompt engineer. Your task is to analyze the input image and "reverse engineer" a high-quality text prompt for it.
+const getSystemInstruction = (intensity: number) => {
+    let instruction = `You are an expert AI art curator and prompt engineer. Your task is to analyze the input image and "reverse engineer" a high-quality text prompt for it.
 
 1.  **Analyze the Visuals:** Identify the art style, medium (oil, digital, photo, etc.), artist influence, color palette, and lighting.
-2.  **Describe the Subject:** Unlike a dry catalog entry, describe the subject matter with artistic flair. Don't just say "a woman"; say "a striking biomechanical woman adorned by chips and circuits".
-3.  **Synthesize (The Creative Prompt):** Combine the subject description and the style analysis into a single, flowing, evocative paragraph. Use descriptive adjectives (e.g., "glinting", "diffused", "vibrant", "melancholic").
-    *   *Example:* "A striking biomechanical woman exudes HR Giger artistry. She is a cyber-goddess adorned by intricate chips and circuits in a monochrome tone, only her eyes glint with a soft pink diffused glow. The composition uses stark chiaroscuro lighting to highlight the metallic textures."
+2.  **Describe the Subject:** Describe the subject matter with artistic flair.
+3.  **Synthesize (The Creative Prompt):** Combine the subject description and the style analysis into a single, flowing, evocative paragraph.`;
 
-Output the result in JSON format containing both the structured metadata and this creative prompt.`;
+    // LEVEL 1: Enhanced Standard (Beefed Up)
+    if (intensity === 1) {
+        instruction += `\n\n**Level 1 (Deep Atmosphere):** Do not be robotic. Focus heavily on the *atmosphere* and *lighting techniques*. Use descriptive adjectives (e.g., "glinting", "diffused", "vibrant", "melancholic", "stark"). Describe the lighting in detail (e.g., "backlit", "softbox", "natural light").`;
+    }
+    // LEVEL 2: Creative Flourish
+    else if (intensity === 2) {
+        instruction += `\n\n**Level 2 (Creative Embellishment):** Embellish the description with creative flourishes. Describe movement, flow, and exaggerated forms that might not be strictly literal but capture the *feeling* (e.g., 'tendrils extending to the sky', 'hair shining like raven feathers', 'eyes glowing with ancient wisdom'). Make it dramatic, poetic, and interpretative.`;
+    }
+    // LEVEL 3: SOTA & Artist Inference
+    else if (intensity >= 3) {
+        instruction += `\n\n**Level 3 (SOTA & Artist Inference):** Take it to the extreme.
+        - **Technical Specs:** You MUST invent plausible high-end technical details: Camera lenses (e.g., '85mm f/1.8', 'macro'), rendering engines (e.g., 'Octane Render', 'Unreal Engine 5'), and advanced lighting terms (e.g., 'subsurface scattering', 'chromatic aberration', 'volumetric fog', 'ray tracing').
+        - **Artist Inference:** You **MUST** detect and explicitly name the specific artist style best suited for this subject based on the image inflection. (e.g., If biomechanical, use "in the style of HR Giger"; if surrealist, use "Salvador Dali"; if baroque light, use "Rembrandt"). 
+        - **Hyper-Detail:** The prompt should be dense, sophisticated, and suitable for a top-tier generative AI model.`;
+    }
 
-export async function analyzeImageStyle(base64ImageData: string, mimeType: string): Promise<AnalysisResult> {
+    instruction += `\n\nOutput the result in JSON format containing both the structured metadata and this creative prompt.`;
+    return instruction;
+};
+
+export async function analyzeImageStyle(base64ImageData: string, mimeType: string, intensity: number = 1): Promise<AnalysisResult> {
     const geminiClient = getAi();
     
     const imagePart = {
@@ -70,7 +88,7 @@ export async function analyzeImageStyle(base64ImageData: string, mimeType: strin
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
         config: {
-            systemInstruction: systemInstruction,
+            systemInstruction: getSystemInstruction(intensity),
             responseMimeType: "application/json",
             responseSchema: responseSchema,
         },
@@ -143,4 +161,54 @@ export async function generateCreativeTitle(prompt: string, modifiers: string[])
     });
     
     return response.text?.trim() || "Untitled Masterpiece";
+}
+
+// --- NEW FUNCTION: Style Extraction ---
+
+const extractionSchema = {
+    type: Type.OBJECT,
+    properties: {
+        lighting: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Lighting keywords (e.g., "volumetric", "chiaroscuro").' },
+        medium: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Art medium (e.g., "oil on canvas", "digital 3D render").' },
+        textures: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Surface qualities (e.g., "matte", "glossy", "grunge").' },
+        techniques: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Rendering techniques (e.g., "impasto", "ray tracing").' },
+        vibe: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Atmospheric or aesthetic descriptors (e.g., "uncanny valley", "ethereal").' }
+    },
+    required: ['lighting', 'medium', 'textures', 'techniques', 'vibe']
+};
+
+export async function extractStylesFromText(promptText: string): Promise<StyleExtractionResult> {
+    const geminiClient = getAi();
+
+    const extractionSystemInstruction = `
+    You are a Style Distiller. Your job is to extract pure stylistic and technical keywords from a long, complex art prompt.
+    
+    CRITICAL RULES:
+    1. **IGNORE SUBJECTS:** Do not extract words describing WHO or WHAT is in the image (e.g., ignore "woman", "cyborg", "cat", "city", "forest").
+    2. **IGNORE COMPOSITION:** Do not extract words describing framing or angles (e.g., ignore "wide shot", "portrait").
+    3. **EXTRACT ONLY:** 
+       - Lighting (e.g., volumetric, rim light, subsurface scattering)
+       - Medium (e.g., oil paint, unreal engine 5, polaroid)
+       - Textures (e.g., grunge, chrome, fluffy)
+       - Techniques/Styles (e.g., cyberpunk, impressionist, ray tracing, uncanny valley)
+    4. **Goal:** Create a list of tags that could be applied to a DIFFERENT subject to give it the same "look and feel".
+    `;
+
+    const response = await geminiClient.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Extract the style DNA from this prompt: "${promptText}"`,
+        config: {
+            systemInstruction: extractionSystemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: extractionSchema,
+        },
+    });
+
+    const jsonText = response.text.trim();
+    try {
+        return JSON.parse(jsonText) as StyleExtractionResult;
+    } catch (e) {
+        console.error("Failed to parse extraction JSON:", jsonText);
+        return { lighting: [], medium: [], textures: [], techniques: [], vibe: [] };
+    }
 }

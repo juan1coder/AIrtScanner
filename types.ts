@@ -9,6 +9,14 @@ export interface AnalysisResult {
   creativePrompt: string; // New field for the evocative description
 }
 
+export interface StyleExtractionResult {
+  lighting: string[];
+  medium: string[];
+  textures: string[];
+  techniques: string[];
+  vibe: string[];
+}
+
 export type OutputFormat = 'txt' | 'json' | 'toml';
 
 export interface GeneratedItem {

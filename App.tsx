@@ -4,9 +4,9 @@ import { ImageUploader } from './components/ImageUploader';
 import { ResultDisplay } from './components/ResultDisplay';
 import { Spinner } from './components/Spinner';
 import { ImageEditor } from './components/ImageEditor';
-import { analyzeImageStyle, editImageWithGemini, generateCreativeTitle } from './services/geminiService';
-import { AnalysisResult, GeneratedItem, STYLE_PRESETS } from './types';
-import { GithubIcon, MagicIcon, WandIcon, HistoryIcon, PlusIcon, DownloadIcon, XIcon, CopyIcon, ChatBubbleIcon, TextIcon } from './components/icons';
+import { analyzeImageStyle, editImageWithGemini, generateCreativeTitle, extractStylesFromText } from './services/geminiService';
+import { AnalysisResult, GeneratedItem, STYLE_PRESETS, StyleExtractionResult } from './types';
+import { GithubIcon, MagicIcon, WandIcon, HistoryIcon, PlusIcon, DownloadIcon, XIcon, CopyIcon, ChatBubbleIcon, TextIcon, FilterIcon, SparklesIcon } from './components/icons';
 import JSZip from 'jszip';
 
 const App: React.FC = () => {
@@ -15,6 +15,7 @@ const App: React.FC = () => {
   
   // Analysis State
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [intensity, setIntensity] = useState<number>(1);
   
   // Generation/Creator State
   const [userIdea, setUserIdea] = useState('');
@@ -22,6 +23,12 @@ const App: React.FC = () => {
   const [customModifier, setCustomModifier] = useState('');
   const [generatedHistory, setGeneratedHistory] = useState<GeneratedItem[]>([]);
   
+  // Style Distiller State
+  const [distillInput, setDistillInput] = useState('');
+  const [extractedStyles, setExtractedStyles] = useState<StyleExtractionResult | null>(null);
+  const [isDistilling, setIsDistilling] = useState(false);
+  const [distillCopied, setDistillCopied] = useState(false);
+
   // Editing State
   const [editingItem, setEditingItem] = useState<GeneratedItem | null>(null);
   
@@ -55,7 +62,7 @@ const App: React.FC = () => {
       const base64Data = imageUrl.split(',')[1];
       const mimeType = imageUrl.split(',')[0].split(':')[1].split(';')[0];
       
-      const result = await analyzeImageStyle(base64Data, mimeType);
+      const result = await analyzeImageStyle(base64Data, mimeType, intensity);
       setAnalysisResult(result);
     } catch (err) {
       console.error(err);
@@ -63,7 +70,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [imageUrl]);
+  }, [imageUrl, intensity]);
 
   const handleGenerateClick = useCallback(async () => {
     if (!imageUrl) {
@@ -120,6 +127,80 @@ const App: React.FC = () => {
     }
   }, [imageUrl, userIdea, selectedModifiers, analysisResult]);
 
+  const handleDistillClick = async () => {
+      if (!distillInput.trim()) return;
+      setIsDistilling(true);
+      setExtractedStyles(null);
+      try {
+          const result = await extractStylesFromText(distillInput);
+          setExtractedStyles(result);
+      } catch (e) {
+          console.error(e);
+          setError("Failed to distill styles.");
+      } finally {
+          setIsDistilling(false);
+      }
+  };
+
+  const formatDistilledOutput = (styles: StyleExtractionResult) => {
+      return `STYLE DISTILLATION REPORT
+${new Date().toLocaleString()}
+
+LIGHTING:
+${styles.lighting.join(', ') || 'None'}
+
+MEDIUM:
+${styles.medium.join(', ') || 'None'}
+
+TEXTURES:
+${styles.textures.join(', ') || 'None'}
+
+TECHNIQUES:
+${styles.techniques.join(', ') || 'None'}
+
+VIBE:
+${styles.vibe.join(', ') || 'None'}
+`;
+  };
+
+  const handleCopyDistilled = () => {
+      if (!extractedStyles) return;
+      const text = formatDistilledOutput(extractedStyles);
+      navigator.clipboard.writeText(text);
+      setDistillCopied(true);
+      setTimeout(() => setDistillCopied(false), 2000);
+  };
+
+  const handleDownloadDistilled = () => {
+      if (!extractedStyles) return;
+      const text = formatDistilledOutput(extractedStyles);
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `style-dna-${Date.now()}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+  };
+
+  const applyDistilledStyles = () => {
+      if (!extractedStyles) return;
+      const allTags = [
+          ...extractedStyles.lighting,
+          ...extractedStyles.medium,
+          ...extractedStyles.textures,
+          ...extractedStyles.techniques,
+          ...extractedStyles.vibe
+      ];
+      // Add only unique tags
+      const uniqueTags = allTags.filter(tag => !selectedModifiers.includes(tag));
+      setSelectedModifiers(prev => [...prev, ...uniqueTags]);
+      setExtractedStyles(null);
+      setDistillInput('');
+  };
+
   const toggleModifier = (mod: string) => {
     setSelectedModifiers(prev => 
         prev.includes(mod) ? prev.filter(m => m !== mod) : [...prev, mod]
@@ -139,6 +220,7 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     setError(null);
     setIsLoading(false);
+    setIntensity(1);
   };
 
   const handleClearAll = () => {
@@ -231,8 +313,10 @@ ${item.styleContext ? `Original Style Context:\n${item.styleContext}` : ''}`;
       <main className="flex-grow container mx-auto p-4 md:p-6">
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* LEFT COLUMN: Creator Controls */}
+            {/* LEFT COLUMN: Creator Controls & Style Distiller */}
             <div className="lg:col-span-4 space-y-6">
+                
+                {/* CREATIVE STUDIO CARD */}
                 <div className="bg-[#13141f] border border-gray-700/60 rounded-xl p-6 shadow-xl">
                     <h2 className="text-lg font-bold text-gray-100 mb-4 flex items-center gap-2">
                         <MagicIcon className="w-5 h-5 text-cyan-400" />
@@ -311,12 +395,92 @@ ${item.styleContext ? `Original Style Context:\n${item.styleContext}` : ''}`;
                         {isGenerating ? <Spinner /> : <><MagicIcon className="w-5 h-5" /> Nano Render</>}
                     </button>
                 </div>
+
+                {/* STYLE DISTILLER CARD */}
+                <div className="bg-[#13141f] border border-gray-700/60 rounded-xl p-6 shadow-xl">
+                    <h2 className="text-lg font-bold text-gray-100 mb-4 flex items-center gap-2">
+                        <FilterIcon className="w-5 h-5 text-amber-400" />
+                        Style Distiller
+                    </h2>
+                    <p className="text-xs text-gray-400 mb-3">
+                        Paste a long prompt below. AI will discard the subjects and extract only the stylistic "juice" (lighting, texture, medium) for you to use.
+                    </p>
+                    
+                    <div className="relative mb-3">
+                        <textarea 
+                             className="w-full bg-[#0b0c15] border border-gray-700 rounded-lg p-3 text-xs text-white placeholder-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none resize-none h-24 pr-8 scrollbar-thin"
+                             placeholder="Paste long art prompt here..."
+                             value={distillInput}
+                             onChange={(e) => setDistillInput(e.target.value)}
+                        />
+                         {distillInput && (
+                            <button 
+                                onClick={() => setDistillInput('')}
+                                className="absolute top-2 right-2 text-gray-500 hover:text-white p-1 bg-gray-800/50 rounded-full transition-colors"
+                                title="Clear text"
+                            >
+                                <XIcon className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
+                    
+                    <button 
+                        onClick={handleDistillClick}
+                        disabled={!distillInput || isDistilling}
+                        className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-200 font-bold py-2 px-4 rounded-lg transition-all flex justify-center items-center gap-2 text-sm disabled:opacity-50"
+                    >
+                        {isDistilling ? <Spinner /> : "Distill Style"}
+                    </button>
+
+                    {extractedStyles && (
+                        <div className="mt-4 bg-[#0b0c15] rounded border border-amber-900/30 p-3 animate-fade-in">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-amber-500 uppercase">Extracted DNA</span>
+                                <div className="flex gap-1 items-center">
+                                     <button 
+                                        onClick={handleCopyDistilled}
+                                        className="text-gray-400 hover:text-white p-1.5 rounded hover:bg-gray-800 transition-colors"
+                                        title="Copy Extracted Styles"
+                                    >
+                                        {distillCopied ? <span className="text-[10px] text-green-400 font-bold">OK</span> : <CopyIcon className="w-3 h-3" />}
+                                    </button>
+                                     <button 
+                                        onClick={handleDownloadDistilled}
+                                        className="text-gray-400 hover:text-white p-1.5 rounded hover:bg-gray-800 transition-colors"
+                                        title="Download Style Report"
+                                    >
+                                        <DownloadIcon className="w-3 h-3" />
+                                    </button>
+                                    <button 
+                                        onClick={applyDistilledStyles}
+                                        className="text-[10px] bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded font-bold ml-1"
+                                    >
+                                        + Add to DNA
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto scrollbar-thin">
+                                {[
+                                    ...extractedStyles.lighting, 
+                                    ...extractedStyles.medium, 
+                                    ...extractedStyles.textures, 
+                                    ...extractedStyles.techniques, 
+                                    ...extractedStyles.vibe
+                                ].map((tag, idx) => (
+                                    <span key={idx} className="text-[10px] bg-amber-900/20 text-amber-200 border border-amber-800/50 px-1.5 py-0.5 rounded">
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* RIGHT COLUMN: Visuals */}
             <div className="lg:col-span-8 flex flex-col gap-6">
                 <div className="bg-[#13141f] rounded-xl p-6 border border-gray-700/60 shadow-xl">
-                     <div className="flex justify-between items-center mb-4">
+                     <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                         <h3 className="text-gray-200 font-bold flex items-center gap-2">
                             Input Image
                             {imageUrl && (
@@ -325,14 +489,36 @@ ${item.styleContext ? `Original Style Context:\n${item.styleContext}` : ''}`;
                                 </button>
                             )}
                         </h3>
+                        
+                        {/* CONTROLS HEADER: Intensity & Scan */}
                         {imageUrl && !analysisResult && (
-                            <button 
-                                onClick={handleAnalyzeClick}
-                                disabled={isLoading}
-                                className="text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 px-4 py-2 rounded text-white transition-all shadow-lg shadow-cyan-900/20 tracking-wide"
-                            >
-                                {isLoading ? 'SCANNING...' : 'SCAN IMAGE'}
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <div className="flex bg-[#0b0c15] rounded-lg p-1 border border-gray-700">
+                                    {[1, 2, 3].map((level) => (
+                                        <button
+                                            key={level}
+                                            onClick={() => setIntensity(level)}
+                                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${
+                                                intensity === level 
+                                                ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-md' 
+                                                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                                            }`}
+                                            title={`Scan Intensity Level ${level}`}
+                                        >
+                                            {level === 3 && <SparklesIcon className="w-3 h-3 text-yellow-300" />}
+                                            {level === 1 ? 'I' : level === 2 ? 'II' : 'III'}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button 
+                                    onClick={handleAnalyzeClick}
+                                    disabled={isLoading}
+                                    className="text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 px-4 py-2 rounded text-white transition-all shadow-lg shadow-cyan-900/20 tracking-wide"
+                                >
+                                    {isLoading ? 'SCANNING...' : 'SCAN IMAGE'}
+                                </button>
+                            </div>
                         )}
                      </div>
                      
